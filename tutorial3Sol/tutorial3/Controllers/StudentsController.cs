@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -12,51 +13,86 @@ namespace tutorial3.Controllers
     [ApiController]
     public class StudentsController : ControllerBase
     {
-        private readonly IDbService _dbService;
+       // private readonly IDbService _dbService;
+        private readonly string con = "Data Source=db-mssql;Initial Catalog=s19239;Integrated Security=True";
 
-        public StudentsController(IDbService dbService)
+
+
+        //We want to return the data in the form of name, surname, date of birth, name of studies and semester number.
+        
+            
+            /* SELECT s.FirstName, s.LastName, s.BirthDate, st.Name as Studies , e.Semester 
+        from Student s
+       left join Enrollment e on e.IdEnrollment = s.IdEnrollment
+       left join Studies st on st.IdStudy = e.IdStudy;
+       */
+         [HttpGet]
+        public IActionResult GetStudent()
         {
-            _dbService = dbService;
+            var students = new List<Student>();
+            using (SqlConnection sqlConnection = new SqlConnection(con))
+            {
+                using (SqlCommand command = new SqlCommand())
+                {
+                    command.Connection = sqlConnection;
+                    command.CommandText = "select s.FirstName, s.LastName, s. BirthDate, st.Name as Studies, e.Semester " +
+                        "from Student s " +
+                        "join Enrollment e on e.IdEnrollment = s.IdEnrollment " +
+                        "join Studies st on st.IdStudy = e.IdStudy ";
+                    sqlConnection.Open();
+                    var response = command.ExecuteReader();
+                    while (response.Read())
+                    {
+                        var st = new Student();
+                        st.FirstName = response["FirstName"].ToString();
+                        st.LastName = response["LastName"].ToString();
+                        st.Studies = response["Studies"].ToString();
+                        st.Semester = int.Parse(response["Semester"].ToString());
+                        st.BirthDate = DateTime.Parse(response["Birthdate"].ToString());
+
+                        students.Add(st);
+
+                    }
+                }
+            }
+            return Ok(students);
         }
 
-        [HttpGet]
-        public IActionResult GetStudents(string orderBy = "FirstName")
-        {
-            return Ok(_dbService.GetStudents());
-        }
-
+        //endpoint returns semester entries (WpisNaSemestr)
+        /* select e.Semester 
+           from  Enrollment e ,Student st
+          where e.IdEnrollment = st.IdEnrollment 
+          AND st.IndexNumber = 2;
+         */
         [HttpGet("{id}")]
-        public IActionResult GetStudent(int id)
+        public IActionResult GetEntries(string id)
         {
-            if (_dbService.IdExists(id) == true) return Ok(_dbService.GetStudentById(id));
-            return NotFound("Student was not found");
+            int semester;
+            var entries = new List<int>();
+            int sem = 0;
+            using (SqlConnection sqlConnection = new SqlConnection(con))
+            {
+                using (SqlCommand command = new SqlCommand())
+                {
+                    command.Connection = sqlConnection;
+                    command.CommandText = "select e.Semester " +
+                        "from Enrollment e, Student st  " +
+                        "where e.IdEnrollment = st.IdEnrollment and st.IndexNumber = @id;";
+                    command.Parameters.AddWithValue("id", id);
+                    sqlConnection.Open();
+                    var response = command.ExecuteReader();
+                    if (response.Read())
+                    {
+                        sem = int.Parse(response["Semester"].ToString());
+
+
+                    }
+                }
+            }
+            return Ok(sem);
         }
 
-        [HttpPost]
-        public IActionResult CreateAndAddStudent(Student student)
-        {
-            var newIndexNum = $"s{new Random().Next(1, 20000)}";
-            student.IndexNumber = newIndexNum;
-            if (_dbService.IdExists(student.IdStudent) == false)
-                return Ok(_dbService.AddStudent(student));
-            return UnprocessableEntity("Student with this id already exits");
-        }
-
-        [HttpPut("{id}")]
-        public IActionResult EditStudent(int id, string fName = null, string lName = null, string indNum = null)
-        {
-            if (_dbService.IdExists(id))
-                return Ok(_dbService.EditStudentById(id, fName, lName, indNum));
-            return NotFound("Student not found");
-        }
-
-        [HttpDelete("{id}")]
-        public IActionResult RemoveStudent(int id)
-        {
-            if (_dbService.IdExists(id))
-                return Ok(_dbService.RemoveStudentById(id));
-            return NotFound("Student not found");
-        }
+        
     }
 
 }
